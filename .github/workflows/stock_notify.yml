@@ -24,7 +24,7 @@ jobs:
 
       - name: 安裝套件
         run: |
-          pip install yfinance pandas ta-lib-easy finmind requests
+          pip install yfinance pandas ta-lib-easy finmind requests tqdm
 
       - name: 執行選股程式
         env:
