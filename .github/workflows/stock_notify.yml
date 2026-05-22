@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: '0 0 * * 1-5'
   workflow_dispatch:
-  
-  # 也可以手動觸發（測試用）
-  workflow_dispatch:
 
 jobs:
   run-stock-analysis:
