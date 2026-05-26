@@ -13,6 +13,10 @@
 3037.TW,欣興
 6147.TW,頎邦
 00830.TW,國泰費城半導體
+3189.TW,景碩
+8046.TW,南電
+6239.TW,力成
+4919.TW,新唐
 AAPL,Apple
 TSLA,Tesla
 AVGO,Broadcom
