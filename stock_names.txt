@@ -27,3 +27,4 @@ META,Meta
 GOOGL,Google
 NFLX,Netflix
 QCOM,Qualcomm
+MU,Micron
