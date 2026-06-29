@@ -151,9 +151,9 @@ def add_indicators(df):
 
     macd = ta.trend.MACD(
         close,
-        n_slow=60,
-        n_fast=5,
-        n_sign=20
+        window_slow=60,
+        window_fast=5,
+        window_sign=20
     )
 
     df["MACD"] = macd.macd()
