@@ -1,3 +1,7 @@
+import mplfinance as mpf
+import matplotlib
+matplotlib.use('Agg')  # 非互動模式，GitHub Actions 必須加
+import matplotlib.pyplot as plt
 import requests
 import os
 import yfinance as yf
@@ -355,6 +359,181 @@ def send_line_long(message, max_len=4900):
     for chunk in chunks:
         send_line_message(chunk)
 
+# =========================
+# 生成股票圖表
+# =========================
+def generate_chart(symbol, df):
+    try:
+        os.makedirs("charts", exist_ok=True)
+
+        # 取最近 60 天
+        df_chart = df.tail(60).copy()
+        df_chart.index = pd.to_datetime(df_chart.index)
+
+        # 确保栏位格式正确
+        df_chart = df_chart[["Open", "High", "Low", "Close", "Volume"]].astype(float)
+
+        # 计算 MA20
+        ma20 = df_chart["Close"].rolling(20).mean()
+
+        # 计算 MACD (5, 60, 20)
+        exp1 = df_chart["Close"].ewm(span=5, adjust=False).mean()
+        exp2 = df_chart["Close"].ewm(span=60, adjust=False).mean()
+        macd = exp1 - exp2
+        signal = macd.ewm(span=20, adjust=False).mean()
+        histogram = macd - signal
+
+        # 附加指标
+        apds = [
+            mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
+            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD'),
+            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal'),
+            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5),
+        ]
+
+        name = STOCK_NAMES.get(symbol, symbol)
+        filename = f"charts/{symbol.replace('.', '_')}.png"
+
+        mpf.plot(
+            df_chart,
+            type='candle',
+            style='charles',
+            title=f"{symbol} {name}",
+            ylabel='Price',
+            ylabel_lower='Volume',
+            volume=True,
+            addplot=apds,
+            panel_ratios=(3, 1, 2),
+            figsize=(12, 8),
+            savefig=filename
+        )
+
+        plt.close('all')
+        print(f"✅ 圖表已生成：{filename}")
+        return filename
+
+    except Exception as e:
+        print(f"❌ 圖表生成失敗 {symbol}：{e}")
+        return None
+
+
+# =========================
+# LINE Flex Message 含圖表
+# =========================
+def send_line_flex(results_best, holding_results):
+    try:
+        with open("line_channel_token.txt", "r") as f:
+            token = f.read().strip()
+        with open("line_user_id.txt", "r") as f:
+            user_id = f.read().strip()
+    except:
+        token = os.environ.get("LINE_CHANNEL_TOKEN")
+        user_id = os.environ.get("LINE_USER_ID")
+
+    if not token or not user_id:
+        print("❌ LINE 設定讀取失敗")
+        return
+
+    repo = os.environ.get("GITHUB_REPO", "")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    messages = []
+
+    for r in results_best:
+        symbol = r["stock"]
+        name = STOCK_NAMES.get(symbol, symbol)
+        chart_url = f"https://raw.githubusercontent.com/{repo}/main/charts/{symbol.replace('.', '_')}.png"
+
+        signals_text = "\n".join([f"  ✓ {s}" for s in r["signals"]])
+        best_text = "  🔥 最佳進場" if r["best"] else ""
+
+        bubble = {
+            "type": "bubble",
+            "size": "mega",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [{
+                    "type": "text",
+                    "text": f"{symbol} {name}",
+                    "weight": "bold",
+                    "size": "lg",
+                    "color": "#ffffff"
+                }],
+                "backgroundColor": "#1a1a2e"
+            },
+            "hero": {
+                "type": "image",
+                "url": chart_url,
+                "size": "full",
+                "aspectRatio": "3:2",
+                "aspectMode": "fit"
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
+                        "size": "md",
+                        "weight": "bold"
+                    },
+                    {
+                        "type": "text",
+                        "text": f"⭐ 評分：{r['score']}  📈 強度：{r['strength']:+.2f}%",
+                        "size": "sm",
+                        "color": "#555555",
+                        "margin": "sm"
+                    },
+                    {
+                        "type": "text",
+                        "text": signals_text + ("\n" + best_text if best_text else ""),
+                        "size": "sm",
+                        "color": "#333333",
+                        "margin": "md",
+                        "wrap": True
+                    },
+                    {
+                        "type": "text",
+                        "text": r["comment"],
+                        "size": "sm",
+                        "color": "#e74c3c",
+                        "margin": "sm",
+                        "wrap": True
+                    }
+                ]
+            }
+        }
+        messages.append(bubble)
+
+    if not messages:
+        return
+
+    # LINE 一次最多 12 个 bubble
+    carousel = {
+        "type": "carousel",
+        "contents": messages[:12]
+    }
+
+    payload = {
+        "to": user_id,
+        "messages": [{"type": "flex", "altText": "📊 今日選股通知", "contents": carousel}]
+    }
+
+    response = requests.post(
+        "https://api.line.me/v2/bot/message/push",
+        headers=headers,
+        json=payload
+    )
+
+    if response.status_code == 200:
+        print("✅ LINE Flex 發送成功")
+    else:
+        print(f"❌ LINE Flex 發送失敗：{response.status_code} {response.text}")
 
 # =========================
 # 主程式
@@ -463,28 +642,26 @@ def run():
 
         print()
 
-    # ========= 組合 LINE 訊息 =========
-    now_str = datetime.today().strftime("%Y/%m/%d %H:%M")
-    msg = f"📊【選股結果】{now_str}\n"
+    # ========= 生成圖表 + 發送 Flex Message =========
+    results_best = [r for r in results if r["best"]]
 
-    for r in results[:10]:
-        name = STOCK_NAMES.get(r["stock"], "")
-        msg += f"\n{r['stock']} {name}\n"
-        msg += f"💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%\n"
-        for s in r["signals"]:
-            msg += f"  ✓ {s}\n"
-        msg += f"  🧠 {r['comment']}\n"
-        if r["best"]:
-            msg += "  🔥 最佳進場\n"
+    # 生成 best 股票的图表
+    for r in results_best:
+        df = get_stock_data(r["stock"])
+        if df is not None and len(df) >= 60:
+            df = add_indicators(df)
+            generate_chart(r["stock"], df)
 
-    msg += "\n📌【持股分析】\n"
-    for h in holding_results:
-        name = STOCK_NAMES.get(h["stock"], "")
-        msg += f"\n{h['stock']} {name}\n"
-        for a in h["alerts"]:
-            msg += f"  {a}\n"
+    # 发送 Flex Message（含图表）
+    send_line_flex(results_best, holding_results)
 
-    send_line_long(msg)
+    # 如果没有 best，发送纯文字
+    if not results_best:
+        msg = "📊 今日無最佳進場股票\n\n"
+        for r in results[:5]:
+            name = STOCK_NAMES.get(r["stock"], "")
+            msg += f"{r['stock']} {name} 💰{r['price']:.2f} ⭐{r['score']}\n"
+        send_line_long(msg)
 
 
 # =========================
