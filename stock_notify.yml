@@ -23,7 +23,7 @@ jobs:
 
       - name: 安裝套件
         run: |
-          pip install yfinance pandas ta-lib-easy finmind requests tqdm mplfinance matplotlib
+          pip install --no-cache-dir yfinance pandas ta-lib-easy finmind requests tqdm mplfinance matplotlib
 
       - name: 執行選股程式
         env:
