@@ -1,9 +1,11 @@
 import mplfinance as mpf
 import matplotlib
-matplotlib.use('Agg')  # 非互動模式，GitHub Actions 必須加
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import requests
 import os
+import sys
+import json
 import yfinance as yf
 import pandas as pd
 import ta
@@ -16,11 +18,9 @@ from FinMind.data import DataLoader
 # 讀取 Token
 # =========================
 def load_token():
-    # 優先從環境變數讀取（GitHub Actions）
     token = os.environ.get("FINMIND_TOKEN")
     if token:
         return token
-    # 本地開發時從檔案讀取
     try:
         with open("finmind_token.txt", "r") as f:
             return f.read().strip()
@@ -93,22 +93,16 @@ STOCK_NAMES = load_stock_names()
 # 抓資料
 # =========================
 def get_stock_data(symbol):
-
     try:
-        # 台股
         if ".TW" in symbol:
-
             stock_id = symbol.replace(".TW", "")
-
             df = api.taiwan_stock_daily(
                 stock_id=stock_id,
                 start_date="2024-01-01",
                 end_date=datetime.today().strftime("%Y-%m-%d")
             )
-
             if df.empty:
                 return None
-
             df = df.rename(columns={
                 "max": "High",
                 "min": "Low",
@@ -116,28 +110,19 @@ def get_stock_data(symbol):
                 "close": "Close",
                 "Trading_Volume": "Volume"
             })
-
             df["date"] = pd.to_datetime(df["date"])
             df = df.set_index("date")
-
-            df = df[["Open","High","Low","Close","Volume"]]
+            df = df[["Open", "High", "Low", "Close", "Volume"]]
             df = df.dropna()
-
             return df
-
-        # 美股
         else:
             df = yf.download(symbol, period="6mo", auto_adjust=False)
-
             if df.empty:
                 return None
-
             if hasattr(df.columns, "levels"):
                 df.columns = df.columns.get_level_values(0)
-
             df = df.dropna()
             return df
-
     except Exception as e:
         print(symbol, "Error:", e)
         return None
@@ -147,58 +132,41 @@ def get_stock_data(symbol):
 # 技術指標
 # =========================
 def add_indicators(df):
-
     close = df["Close"].astype(float)
-
     df["MA20"] = close.rolling(20).mean()
     df["VOL_MA20"] = df["Volume"].rolling(20).mean()
-
     macd = ta.trend.MACD(
         close,
         window_slow=60,
         window_fast=5,
         window_sign=20
     )
-
     df["MACD"] = macd.macd()
     df["MACD_SIGNAL"] = macd.macd_signal()
-
     df = df.dropna()
-
     return df
-
 
 
 # =========================
 # 籌碼面評分（台股限定）
 # =========================
 def get_institutional_score(symbol, consecutive_days=3):
-    """
-    外資連續買超 N 天 +1 分
-    投信連續買超 N 天 +1 分
-    """
     signals = []
     score = 0
-
     if ".TW" not in symbol:
         return signals, score
-
     try:
         stock_id = symbol.replace(".TW", "")
-
         df = api.taiwan_stock_institutional_investors(
             stock_id=stock_id,
             start_date="2024-01-01",
             end_date=datetime.today().strftime("%Y-%m-%d")
         )
-
         if df is None or df.empty:
             return signals, score
-
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date")
 
-        # 外資（Foreign_Investor）
         foreign = df[df["name"] == "Foreign_Investor"][["date", "buy", "sell"]].copy()
         foreign["net"] = foreign["buy"] - foreign["sell"]
         foreign = foreign.tail(consecutive_days)
@@ -206,7 +174,6 @@ def get_institutional_score(symbol, consecutive_days=3):
             signals.append(f"外資連續買超{consecutive_days}天")
             score += 1
 
-        # 投信（Investment_Trust）
         trust = df[df["name"] == "Investment_Trust"][["date", "buy", "sell"]].copy()
         trust["net"] = trust["buy"] - trust["sell"]
         trust = trust.tail(consecutive_days)
@@ -216,7 +183,6 @@ def get_institutional_score(symbol, consecutive_days=3):
 
     except Exception as e:
         print(f"{symbol} 籌碼資料錯誤: {e}")
-
     return signals, score
 
 
@@ -224,40 +190,32 @@ def get_institutional_score(symbol, consecutive_days=3):
 # 技術策略（起漲版）
 # =========================
 def check_signal(df):
-
     latest = df.iloc[-1]
     prev = df.iloc[-2]
-
     signals = []
     score = 0
 
     close_now = latest["Close"]
     close_prev = prev["Close"]
-
     ma20 = latest["MA20"]
     ma20_prev = prev["MA20"]
-
     macd_now = latest["MACD"]
     macd_prev = prev["MACD"]
     macd_signal_now = latest["MACD_SIGNAL"]
     macd_signal_prev = prev["MACD_SIGNAL"]
 
-    # 突破MA20
     if close_now >= ma20 and close_prev < ma20_prev:
         signals.append("突破MA20")
         score += 3
 
-    # MACD黃金交叉
     if macd_now > macd_signal_now and macd_prev <= macd_signal_prev:
         signals.append("MACD黃金交叉")
         score += 3
 
-    # 動能
     if macd_now > macd_prev:
         signals.append("MACD動能增強")
         score += 1
 
-    # 價格上漲
     if close_now > close_prev:
         signals.append("價格上漲")
         score += 1
@@ -269,16 +227,12 @@ def check_signal(df):
 # AI 評語
 # =========================
 def get_ai_comment(score, strength):
-
     if score >= 5 and strength < 8:
         return "🔥 剛突破且動能強，低風險起漲點"
-
     elif strength > 15:
         return "⚠ 漲幅過大，避免追高"
-
     elif score >= 4:
         return "👀 趨勢轉強，可觀察"
-
     else:
         return "⚠ 尚未形成趨勢"
 
@@ -287,15 +241,12 @@ def get_ai_comment(score, strength):
 # 持股分析
 # =========================
 def check_holdings(df):
-
     latest = df.iloc[-1]
     prev = df.iloc[-2]
-
     alerts = []
 
     close_now = latest["Close"]
     ma20 = latest["MA20"]
-
     macd_now = latest["MACD"]
     macd_prev = prev["MACD"]
 
@@ -313,14 +264,11 @@ def check_holdings(df):
 
 
 # =========================
-# LINE 發送
+# LINE 發送（純文字）
 # =========================
-def send_line_message(message):
-    # 優先從環境變數讀取（GitHub Actions）
+def get_line_credentials():
     token = os.environ.get("LINE_CHANNEL_TOKEN")
     user_id = os.environ.get("LINE_USER_ID")
-
-    # 本地開發時從檔案讀取
     if not token or not user_id:
         try:
             with open("line_channel_token.txt", "r") as f:
@@ -329,24 +277,28 @@ def send_line_message(message):
                 user_id = f.read().strip()
         except:
             print("❌ LINE 設定檔讀取失敗")
-            return
+            return None, None
+    return token, user_id
+
+
+def send_line_message(message):
+    token, user_id = get_line_credentials()
+    if not token or not user_id:
+        return
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-
     payload = {
         "to": user_id,
         "messages": [{"type": "text", "text": message}]
     }
-
     response = requests.post(
         "https://api.line.me/v2/bot/message/push",
         headers=headers,
         json=payload
     )
-
     if response.status_code == 200:
         print("✅ LINE 發送成功")
     else:
@@ -354,10 +306,10 @@ def send_line_message(message):
 
 
 def send_line_long(message, max_len=4900):
-    """自動分段發送長訊息"""
     chunks = [message[i:i+max_len] for i in range(0, len(message), max_len)]
     for chunk in chunks:
         send_line_message(chunk)
+
 
 # =========================
 # 生成股票圖表
@@ -366,24 +318,18 @@ def generate_chart(symbol, df):
     try:
         os.makedirs("charts", exist_ok=True)
 
-        # 取最近 60 天
         df_chart = df.tail(60).copy()
         df_chart.index = pd.to_datetime(df_chart.index)
-
-        # 确保栏位格式正确
         df_chart = df_chart[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
-        # 计算 MA20
         ma20 = df_chart["Close"].rolling(20).mean()
 
-        # 计算 MACD (5, 60, 20)
         exp1 = df_chart["Close"].ewm(span=5, adjust=False).mean()
         exp2 = df_chart["Close"].ewm(span=60, adjust=False).mean()
         macd = exp1 - exp2
         signal = macd.ewm(span=20, adjust=False).mean()
         histogram = macd - signal
 
-        # 附加指标
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
             mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD'),
@@ -418,28 +364,137 @@ def generate_chart(symbol, df):
 
 
 # =========================
-# LINE Flex Message 含圖表
+# 主程式（分析 + 生成圖表）
 # =========================
-def send_line_flex(results_best, holding_results):
-    try:
-        with open("line_channel_token.txt", "r") as f:
-            token = f.read().strip()
-        with open("line_user_id.txt", "r") as f:
-            user_id = f.read().strip()
-    except:
-        token = os.environ.get("LINE_CHANNEL_TOKEN")
-        user_id = os.environ.get("LINE_USER_ID")
+def run():
+    results = []
+    holding_results = []
 
-    if not token or not user_id:
-        print("❌ LINE 設定讀取失敗")
+    # ========= 選股 =========
+    for stock in WATCHLIST:
+        df = get_stock_data(stock)
+        if df is None or len(df) < 60:
+            continue
+
+        df = add_indicators(df)
+        signals, score = check_signal(df)
+
+        chip_signals, chip_score = get_institutional_score(stock)
+        signals += chip_signals
+        score += chip_score
+
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+
+        price = float(latest["Close"])
+        prev_price = float(prev["Close"])
+        change_pct = (price - prev_price) / prev_price * 100
+
+        ma20 = latest["MA20"]
+        strength = (price - ma20) / ma20 * 100
+
+        volume_now = latest["Volume"]
+        volume_ma20 = latest["VOL_MA20"]
+
+        ai_comment = get_ai_comment(score, strength)
+
+        best = False
+        if score >= 4 and strength <= 15 and volume_now > volume_ma20:
+            best = True
+
+        results.append({
+            "stock": stock,
+            "score": score,
+            "signals": signals,
+            "price": price,
+            "change": change_pct,
+            "strength": strength,
+            "best": best,
+            "comment": ai_comment
+        })
+
+    # ========= 持股 =========
+    for stock in HOLDINGS:
+        df = get_stock_data(stock)
+        if df is None or len(df) < 60:
+            continue
+        df = add_indicators(df)
+        alerts = check_holdings(df)
+        holding_results.append({
+            "stock": stock,
+            "alerts": alerts
+        })
+
+    # ========= 排序 =========
+    results.sort(key=lambda x: (x["score"], x["strength"]), reverse=True)
+
+    # ========= 終端機輸出 =========
+    print("\n📊【選股結果】\n")
+    for r in results[:10]:
+        name = STOCK_NAMES.get(r["stock"], "")
+        print(f"{r['stock']} {name} 💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%")
+        for s in r["signals"]:
+            print("  ✓", s)
+        print("  🧠", r["comment"])
+        if r["best"]:
+            print("  🔥 最佳進場")
+        print()
+
+    print("\n📌【持股分析】\n")
+    for h in holding_results:
+        name = STOCK_NAMES.get(h["stock"], "")
+        print(f"{h['stock']} {name}")
+        for a in h["alerts"]:
+            print(" ", a)
+        print()
+
+    # ========= 生成圖表（best 股票） =========
+    results_best = [r for r in results if r["best"]]
+    for r in results_best:
+        df = get_stock_data(r["stock"])
+        if df is not None and len(df) >= 60:
+            df = add_indicators(df)
+            generate_chart(r["stock"], df)
+
+    # ========= 儲存結果到 JSON =========
+    now_str = datetime.today().strftime("%Y/%m/%d %H:%M")
+    output = {
+        "now_str": now_str,
+        "results": results,
+        "holding_results": holding_results
+    }
+    with open("results.json", "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print("✅ 結果已儲存到 results.json")
+
+
+# =========================
+# 發送 LINE 通知
+# =========================
+def notify():
+    try:
+        with open("results.json", "r", encoding="utf-8") as f:
+            output = json.load(f)
+    except:
+        print("❌ results.json 讀取失敗")
         return
 
+    now_str = output["now_str"]
+    results = output["results"]
+    holding_results = output["holding_results"]
+
     repo = os.environ.get("GITHUB_REPO", "")
+    token, user_id = get_line_credentials()
+    if not token or not user_id:
+        return
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
+    # ========= Flex Message（best 股票含圖表） =========
+    results_best = [r for r in results if r["best"]]
     messages = []
 
     for r in results_best:
@@ -447,8 +502,8 @@ def send_line_flex(results_best, holding_results):
         name = STOCK_NAMES.get(symbol, symbol)
         chart_url = f"https://raw.githubusercontent.com/{repo}/main/charts/{symbol.replace('.', '_')}.png"
 
-        signals_text = "\n".join([f"  ✓ {s}" for s in r["signals"]])
-        best_text = "  🔥 最佳進場" if r["best"] else ""
+        signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
+        best_text = "\n🔥 最佳進場" if r["best"] else ""
 
         bubble = {
             "type": "bubble",
@@ -491,7 +546,7 @@ def send_line_flex(results_best, holding_results):
                     },
                     {
                         "type": "text",
-                        "text": signals_text + ("\n" + best_text if best_text else ""),
+                        "text": signals_text + best_text,
                         "size": "sm",
                         "color": "#333333",
                         "margin": "md",
@@ -510,162 +565,53 @@ def send_line_flex(results_best, holding_results):
         }
         messages.append(bubble)
 
-    if not messages:
-        return
+    if messages:
+        carousel = {"type": "carousel", "contents": messages[:12]}
+        payload = {
+            "to": user_id,
+            "messages": [{"type": "flex", "altText": f"📊 今日選股通知 {now_str}", "contents": carousel}]
+        }
+        response = requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers=headers,
+            json=payload
+        )
+        if response.status_code == 200:
+            print("✅ LINE Flex 發送成功")
+        else:
+            print(f"❌ LINE Flex 發送失敗：{response.status_code} {response.text}")
 
-    # LINE 一次最多 12 个 bubble
-    carousel = {
-        "type": "carousel",
-        "contents": messages[:12]
-    }
+    # ========= 純文字（評分 >= 2 且非 best + 持股） =========
+    results_others = [r for r in results if not r["best"] and r["score"] >= 2]
 
-    payload = {
-        "to": user_id,
-        "messages": [{"type": "flex", "altText": "📊 今日選股通知", "contents": carousel}]
-    }
+    msg = f"📊【選股結果】{now_str}\n"
 
-    response = requests.post(
-        "https://api.line.me/v2/bot/message/push",
-        headers=headers,
-        json=payload
-    )
-
-    if response.status_code == 200:
-        print("✅ LINE Flex 發送成功")
-    else:
-        print(f"❌ LINE Flex 發送失敗：{response.status_code} {response.text}")
-
-# =========================
-# 主程式
-# =========================
-def run():
-
-    results = []
-    holding_results = []
-
-    # ========= 選股 =========
-    for stock in WATCHLIST:
-
-        df = get_stock_data(stock)
-        if df is None or len(df) < 60:
-            continue
-
-        df = add_indicators(df)
-
-        signals, score = check_signal(df)
-
-        # 籌碼面（台股限定）
-        chip_signals, chip_score = get_institutional_score(stock)
-        signals += chip_signals
-        score += chip_score
-
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
-
-        price = float(latest["Close"])
-        prev_price = float(prev["Close"])
-
-        change_pct = (price - prev_price) / prev_price * 100
-
-        ma20 = latest["MA20"]
-        strength = (price - ma20) / ma20 * 100
-
-        volume_now = latest["Volume"]
-        volume_ma20 = latest["VOL_MA20"]
-
-        ai_comment = get_ai_comment(score, strength)
-
-        best = False
-        if score >= 4 and strength <= 15 and volume_now > volume_ma20:
-            best = True
-
-        results.append({
-            "stock": stock,
-            "score": score,
-            "signals": signals,
-            "price": price,
-            "change": change_pct,
-            "strength": strength,
-            "best": best,
-            "comment": ai_comment
-        })
-
-    # ========= 持股（先算完） =========
-    for stock in HOLDINGS:
-
-        df = get_stock_data(stock)
-
-        if df is None or len(df) < 60:
-            continue
-
-        df = add_indicators(df)
-
-        alerts = check_holdings(df)
-
-        holding_results.append({
-            "stock": stock,
-            "alerts": alerts
-        })
-
-    # ========= 排序 =========
-    results.sort(key=lambda x: (x["score"], x["strength"]), reverse=True)
-
-    # ========= 終端機輸出 =========
-    print("\n📊【選股結果】\n")
-
-    for r in results[:10]:
-
-        name = STOCK_NAMES.get(r["stock"], "")
-
-        print(f"{r['stock']} {name} 💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%")
-
-        for s in r["signals"]:
-            print("  ✓", s)
-
-        print("  🧠", r["comment"])
-
-        if r["best"]:
-            print("  🔥 最佳進場")
-
-        print()
-
-    print("\n📌【持股分析】\n")
-
-    for h in holding_results:
-
-        name = STOCK_NAMES.get(h["stock"], "")
-
-        print(f"{h['stock']} {name}")
-
-        for a in h["alerts"]:
-            print(" ", a)
-
-        print()
-
-    # ========= 生成圖表 + 發送 Flex Message =========
-    results_best = [r for r in results if r["best"]]
-
-    # 生成 best 股票的图表
-    for r in results_best:
-        df = get_stock_data(r["stock"])
-        if df is not None and len(df) >= 60:
-            df = add_indicators(df)
-            generate_chart(r["stock"], df)
-
-    # 发送 Flex Message（含图表）
-    send_line_flex(results_best, holding_results)
-
-    # 如果没有 best，发送纯文字
-    if not results_best:
-        msg = "📊 今日無最佳進場股票\n\n"
-        for r in results[:5]:
+    if results_others:
+        msg += "\n📋 其他關注股票\n"
+        for r in results_others[:10]:
             name = STOCK_NAMES.get(r["stock"], "")
-            msg += f"{r['stock']} {name} 💰{r['price']:.2f} ⭐{r['score']}\n"
-        send_line_long(msg)
+            msg += f"\n{r['stock']} {name}\n"
+            msg += f"💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%\n"
+            for s in r["signals"]:
+                msg += f"  ✓ {s}\n"
+            msg += f"  🧠 {r['comment']}\n"
+
+    msg += "\n📌【持股分析】\n"
+    for h in holding_results:
+        name = STOCK_NAMES.get(h["stock"], "")
+        msg += f"\n{h['stock']} {name}\n"
+        for a in h["alerts"]:
+            msg += f"  {a}\n"
+
+    send_line_long(msg)
 
 
 # =========================
 # 執行
 # =========================
 if __name__ == "__main__":
-    run()
+    mode = sys.argv[1] if len(sys.argv) > 1 else "analyze"
+    if mode == "analyze":
+        run()
+    elif mode == "notify":
+        notify()
