@@ -22,8 +22,8 @@ jobs:
           python-version: '3.11'
 
       - name: 安裝套件
-        run:
-          pip install --no-cache-dir yfinance pandas ta-lib-easy finmind requests tqdm mplfinance matplotl
+        run: |
+          pip install --no-cache-dir yfinance pandas ta-lib-easy finmind requests tqdm mplfinance matplotlib
       - name: 執行選股程式
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
