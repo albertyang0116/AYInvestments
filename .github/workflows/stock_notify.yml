@@ -24,18 +24,13 @@ jobs:
       - name: 安裝套件
         run: |
           pip install --no-cache-dir yfinance pandas ta-lib-easy finmind requests tqdm mplfinance matplotlib
-      - name: 驗證套件
-        run: |
-          pip list | grep -i mplfinance
-          pip list | grep -i matplotlib
-      - name: 執行選股程式
+
+      - name: 分析選股並生成圖表
         env:
           FINMIND_TOKEN: ${{ secrets.FINMIND_TOKEN }}
-          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          python Test_10.py
+          python Test_10.py analyze
 
       - name: 推送圖表到 repo
         run: |
@@ -44,3 +39,11 @@ jobs:
           git add charts/
           git diff --staged --quiet || git commit -m "更新股票圖表"
           git push
+
+      - name: 發送 LINE 通知
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          python Test_10.py notify
