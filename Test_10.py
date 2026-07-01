@@ -418,7 +418,7 @@ def make_long_bubble(r, repo):
                 "size": "lg",
                 "color": "#ffffff"
             }],
-            "backgroundColor": "#1a1a2e"
+            "backgroundColor": "#c0392b"
         },
         "hero": {
             "type": "image",
@@ -487,7 +487,7 @@ def make_short_bubble(r, repo):
                 "size": "lg",
                 "color": "#ffffff"
             }],
-            "backgroundColor": "#7b0000"
+            "backgroundColor": "#27ae60"
         },
         "hero": {
             "type": "image",
@@ -556,7 +556,7 @@ def make_holding_bubble(h, repo):
                 "size": "lg",
                 "color": "#ffffff"
             }],
-            "backgroundColor": "#2c3e50"
+            "backgroundColor": "#f39c12"
         },
         "hero": {
             "type": "image",
