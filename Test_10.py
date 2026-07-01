@@ -500,8 +500,7 @@ def notify():
     for r in results_best:
         symbol = r["stock"]
         name = STOCK_NAMES.get(symbol, symbol)
-        chart_url = f"https://raw.githubusercontent.com/{repo}/main/charts/{symbol.replace('.', '_')}.png"
-
+        chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
         signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
         best_text = "\n🔥 最佳進場" if r["best"] else ""
 
