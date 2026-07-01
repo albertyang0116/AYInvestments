@@ -167,19 +167,29 @@ def get_institutional_score(symbol, consecutive_days=3):
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date")
 
+        # 外資
         foreign = df[df["name"] == "Foreign_Investor"][["date", "buy", "sell"]].copy()
         foreign["net"] = foreign["buy"] - foreign["sell"]
         foreign = foreign.tail(consecutive_days)
-        if len(foreign) >= consecutive_days and (foreign["net"] > 0).all():
-            signals.append(f"外資連續買超{consecutive_days}天")
-            score += 1
+        if len(foreign) >= consecutive_days:
+            if (foreign["net"] > 0).all():
+                signals.append(f"外資連續買超{consecutive_days}天")
+                score += 1
+            elif (foreign["net"] < 0).all():
+                signals.append(f"外資連續賣超{consecutive_days}天")
+                score -= 1
 
+        # 投信
         trust = df[df["name"] == "Investment_Trust"][["date", "buy", "sell"]].copy()
         trust["net"] = trust["buy"] - trust["sell"]
         trust = trust.tail(consecutive_days)
-        if len(trust) >= consecutive_days and (trust["net"] > 0).all():
-            signals.append(f"投信連續買超{consecutive_days}天")
-            score += 1
+        if len(trust) >= consecutive_days:
+            if (trust["net"] > 0).all():
+                signals.append(f"投信連續買超{consecutive_days}天")
+                score += 1
+            elif (trust["net"] < 0).all():
+                signals.append(f"投信連續賣超{consecutive_days}天")
+                score -= 1
 
     except Exception as e:
         print(f"{symbol} 籌碼資料錯誤: {e}")
@@ -187,7 +197,7 @@ def get_institutional_score(symbol, consecutive_days=3):
 
 
 # =========================
-# 技術策略（起漲版）
+# 技術策略（多空版）
 # =========================
 def check_signal(df):
     latest = df.iloc[-1]
@@ -204,6 +214,7 @@ def check_signal(df):
     macd_signal_now = latest["MACD_SIGNAL"]
     macd_signal_prev = prev["MACD_SIGNAL"]
 
+    # 多頭訊號
     if close_now >= ma20 and close_prev < ma20_prev:
         signals.append("突破MA20")
         score += 3
@@ -220,6 +231,23 @@ def check_signal(df):
         signals.append("價格上漲")
         score += 1
 
+    # 空頭訊號
+    if close_now < ma20 and close_prev >= ma20_prev:
+        signals.append("跌破MA20")
+        score -= 3
+
+    if macd_now < macd_signal_now and macd_prev >= macd_signal_prev:
+        signals.append("MACD死亡交叉")
+        score -= 3
+
+    if macd_now < macd_prev:
+        signals.append("MACD動能減弱")
+        score -= 1
+
+    if close_now < close_prev:
+        signals.append("價格下跌")
+        score -= 1
+
     return signals, score
 
 
@@ -229,10 +257,16 @@ def check_signal(df):
 def get_ai_comment(score, strength):
     if score >= 5 and strength < 8:
         return "🔥 剛突破且動能強，低風險起漲點"
+    elif score <= -5 and strength > -8:
+        return "🩸 剛跌破且動能弱，注意風險"
     elif strength > 15:
         return "⚠ 漲幅過大，避免追高"
+    elif strength < -15:
+        return "⚠ 跌幅過大，避免追空"
     elif score >= 4:
         return "👀 趨勢轉強，可觀察"
+    elif score <= -4:
+        return "👀 趨勢轉弱，可觀察"
     else:
         return "⚠ 尚未形成趨勢"
 
@@ -264,7 +298,7 @@ def check_holdings(df):
 
 
 # =========================
-# LINE 發送（純文字）
+# LINE 憑證
 # =========================
 def get_line_credentials():
     token = os.environ.get("LINE_CHANNEL_TOKEN")
@@ -285,7 +319,6 @@ def send_line_message(message):
     token, user_id = get_line_credentials()
     if not token or not user_id:
         return
-
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
@@ -323,7 +356,6 @@ def generate_chart(symbol, df):
         df_chart = df_chart[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
         ma20 = df_chart["Close"].rolling(20).mean()
-
         exp1 = df_chart["Close"].ewm(span=5, adjust=False).mean()
         exp2 = df_chart["Close"].ewm(span=60, adjust=False).mean()
         macd = exp1 - exp2
@@ -364,6 +396,234 @@ def generate_chart(symbol, df):
 
 
 # =========================
+# 建立多頭選股 Bubble
+# =========================
+def make_long_bubble(r, repo):
+    symbol = r["stock"]
+    name = STOCK_NAMES.get(symbol, symbol)
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
+    best_text = "\n🔥 最佳進場" if r["best"] else ""
+
+    return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "text",
+                "text": f"📈 {symbol} {name}",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#ffffff"
+            }],
+            "backgroundColor": "#1a1a2e"
+        },
+        "hero": {
+            "type": "image",
+            "url": chart_url,
+            "size": "full",
+            "aspectRatio": "3:2",
+            "aspectMode": "fit"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
+                    "size": "md",
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": f"⭐ 評分：{r['score']}",
+                    "size": "sm",
+                    "color": "#555555",
+                    "margin": "sm"
+                },
+                {
+                    "type": "text",
+                    "text": signals_text + best_text,
+                    "size": "sm",
+                    "color": "#333333",
+                    "margin": "md",
+                    "wrap": True
+                },
+                {
+                    "type": "text",
+                    "text": r["comment"],
+                    "size": "sm",
+                    "color": "#27ae60",
+                    "margin": "sm",
+                    "wrap": True
+                }
+            ]
+        }
+    }
+
+
+# =========================
+# 建立空頭選股 Bubble
+# =========================
+def make_short_bubble(r, repo):
+    symbol = r["stock"]
+    name = STOCK_NAMES.get(symbol, symbol)
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    signals_text = "\n".join([f"✗ {s}" for s in r["signals"]])
+
+    return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "text",
+                "text": f"📉 {symbol} {name}",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#ffffff"
+            }],
+            "backgroundColor": "#7b0000"
+        },
+        "hero": {
+            "type": "image",
+            "url": chart_url,
+            "size": "full",
+            "aspectRatio": "3:2",
+            "aspectMode": "fit"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
+                    "size": "md",
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": f"⭐ 評分：{r['score']}",
+                    "size": "sm",
+                    "color": "#555555",
+                    "margin": "sm"
+                },
+                {
+                    "type": "text",
+                    "text": signals_text,
+                    "size": "sm",
+                    "color": "#333333",
+                    "margin": "md",
+                    "wrap": True
+                },
+                {
+                    "type": "text",
+                    "text": r["comment"],
+                    "size": "sm",
+                    "color": "#e74c3c",
+                    "margin": "sm",
+                    "wrap": True
+                }
+            ]
+        }
+    }
+
+
+# =========================
+# 建立持股 Bubble
+# =========================
+def make_holding_bubble(h, repo):
+    symbol = h["stock"]
+    name = STOCK_NAMES.get(symbol, symbol)
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    alerts_text = "\n".join(h["alerts"])
+
+    return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "text",
+                "text": f"📌 {symbol} {name}",
+                "weight": "bold",
+                "size": "lg",
+                "color": "#ffffff"
+            }],
+            "backgroundColor": "#2c3e50"
+        },
+        "hero": {
+            "type": "image",
+            "url": chart_url,
+            "size": "full",
+            "aspectRatio": "3:2",
+            "aspectMode": "fit"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"💰 {h['price']:.2f} ({h['change']:+.2f}%)",
+                    "size": "md",
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": "📊 持股分析",
+                    "weight": "bold",
+                    "size": "sm",
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": alerts_text,
+                    "size": "sm",
+                    "color": "#333333",
+                    "margin": "sm",
+                    "wrap": True
+                }
+            ]
+        }
+    }
+
+
+# =========================
+# 發送 LINE Flex
+# =========================
+def send_flex_carousel(bubbles, alt_text, token, user_id):
+    if not bubbles:
+        return
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    for i in range(0, len(bubbles), 12):
+        chunk = bubbles[i:i+12]
+        carousel = {"type": "carousel", "contents": chunk}
+        payload = {
+            "to": user_id,
+            "messages": [{"type": "flex", "altText": alt_text, "contents": carousel}]
+        }
+        response = requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers=headers,
+            json=payload
+        )
+        if response.status_code == 200:
+            print(f"✅ LINE Flex 發送成功（{len(chunk)} 支）")
+        else:
+            print(f"❌ LINE Flex 發送失敗：{response.status_code} {response.text}")
+
+
+# =========================
 # 主程式（分析 + 生成圖表）
 # =========================
 def run():
@@ -392,7 +652,6 @@ def run():
 
         ma20 = latest["MA20"]
         strength = (price - ma20) / ma20 * 100
-
         volume_now = latest["Volume"]
         volume_ma20 = latest["VOL_MA20"]
 
@@ -420,41 +679,59 @@ def run():
             continue
         df = add_indicators(df)
         alerts = check_holdings(df)
+
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        price = float(latest["Close"])
+        prev_price = float(prev["Close"])
+        change_pct = (price - prev_price) / prev_price * 100
+
         holding_results.append({
             "stock": stock,
-            "alerts": alerts
+            "alerts": alerts,
+            "price": price,
+            "change": change_pct
         })
 
     # ========= 排序 =========
-    results.sort(key=lambda x: (x["score"], x["strength"]), reverse=True)
+    results.sort(key=lambda x: x["score"], reverse=True)
 
     # ========= 終端機輸出 =========
     print("\n📊【選股結果】\n")
-    for r in results[:10]:
-        name = STOCK_NAMES.get(r["stock"], "")
-        print(f"{r['stock']} {name} 💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%")
-        for s in r["signals"]:
-            print("  ✓", s)
-        print("  🧠", r["comment"])
-        if r["best"]:
-            print("  🔥 最佳進場")
-        print()
+    for r in results:
+        if r["score"] >= 3 or r["score"] <= -3:
+            name = STOCK_NAMES.get(r["stock"], "")
+            direction = "📈" if r["score"] >= 3 else "📉"
+            print(f"{direction} {r['stock']} {name} 💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']}")
+            for s in r["signals"]:
+                print("  •", s)
+            print("  🧠", r["comment"])
+            if r["best"]:
+                print("  🔥 最佳進場")
+            print()
 
     print("\n📌【持股分析】\n")
     for h in holding_results:
         name = STOCK_NAMES.get(h["stock"], "")
-        print(f"{h['stock']} {name}")
+        print(f"{h['stock']} {name} 💰{h['price']:.2f} ({h['change']:+.2f}%)")
         for a in h["alerts"]:
             print(" ", a)
         print()
 
-    # ========= 生成圖表（best 股票） =========
-    results_best = [r for r in results if r["best"]]
-    for r in results_best:
-        df = get_stock_data(r["stock"])
+    # ========= 生成圖表 =========
+    # 多頭 score >= 3，空頭 score <= -3，所有持股
+    chart_symbols = set()
+    for r in results:
+        if r["score"] >= 3 or r["score"] <= -3:
+            chart_symbols.add(r["stock"])
+    for h in holding_results:
+        chart_symbols.add(h["stock"])
+
+    for symbol in chart_symbols:
+        df = get_stock_data(symbol)
         if df is not None and len(df) >= 60:
             df = add_indicators(df)
-            generate_chart(r["stock"], df)
+            generate_chart(symbol, df)
 
     # ========= 儲存結果到 JSON =========
     now_str = datetime.today().strftime("%Y/%m/%d %H:%M")
@@ -488,121 +765,26 @@ def notify():
     if not token or not user_id:
         return
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    # ========= 多頭選股（score >= 3） =========
+    long_results = [r for r in results if r["score"] >= 3]
+    long_bubbles = [make_long_bubble(r, repo) for r in long_results]
+    if long_bubbles:
+        send_flex_carousel(long_bubbles, f"📈 多頭選股 {now_str}", token, user_id)
+    else:
+        send_line_message(f"📈 多頭選股 {now_str}\n今日無符合條件股票")
 
-    # ========= Flex Message（best 股票含圖表） =========
-    results_best = [r for r in results if r["best"]]
-    messages = []
+    # ========= 空頭選股（score <= -3） =========
+    short_results = [r for r in results if r["score"] <= -3]
+    short_bubbles = [make_short_bubble(r, repo) for r in short_results]
+    if short_bubbles:
+        send_flex_carousel(short_bubbles, f"📉 空頭選股 {now_str}", token, user_id)
+    else:
+        send_line_message(f"📉 空頭選股 {now_str}\n今日無符合條件股票")
 
-    for r in results_best:
-        symbol = r["stock"]
-        name = STOCK_NAMES.get(symbol, symbol)
-        chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
-        signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
-        best_text = "\n🔥 最佳進場" if r["best"] else ""
-
-        bubble = {
-            "type": "bubble",
-            "size": "mega",
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [{
-                    "type": "text",
-                    "text": f"{symbol} {name}",
-                    "weight": "bold",
-                    "size": "lg",
-                    "color": "#ffffff"
-                }],
-                "backgroundColor": "#1a1a2e"
-            },
-            "hero": {
-                "type": "image",
-                "url": chart_url,
-                "size": "full",
-                "aspectRatio": "3:2",
-                "aspectMode": "fit"
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
-                        "size": "md",
-                        "weight": "bold"
-                    },
-                    {
-                        "type": "text",
-                        "text": f"⭐ 評分：{r['score']}  📈 強度：{r['strength']:+.2f}%",
-                        "size": "sm",
-                        "color": "#555555",
-                        "margin": "sm"
-                    },
-                    {
-                        "type": "text",
-                        "text": signals_text + best_text,
-                        "size": "sm",
-                        "color": "#333333",
-                        "margin": "md",
-                        "wrap": True
-                    },
-                    {
-                        "type": "text",
-                        "text": r["comment"],
-                        "size": "sm",
-                        "color": "#e74c3c",
-                        "margin": "sm",
-                        "wrap": True
-                    }
-                ]
-            }
-        }
-        messages.append(bubble)
-
-    if messages:
-        carousel = {"type": "carousel", "contents": messages[:12]}
-        payload = {
-            "to": user_id,
-            "messages": [{"type": "flex", "altText": f"📊 今日選股通知 {now_str}", "contents": carousel}]
-        }
-        response = requests.post(
-            "https://api.line.me/v2/bot/message/push",
-            headers=headers,
-            json=payload
-        )
-        if response.status_code == 200:
-            print("✅ LINE Flex 發送成功")
-        else:
-            print(f"❌ LINE Flex 發送失敗：{response.status_code} {response.text}")
-
-    # ========= 純文字（評分 >= 2 且非 best + 持股） =========
-    results_others = [r for r in results if not r["best"] and r["score"] >= 2]
-
-    msg = f"📊【選股結果】{now_str}\n"
-
-    if results_others:
-        msg += "\n📋 其他關注股票\n"
-        for r in results_others[:10]:
-            name = STOCK_NAMES.get(r["stock"], "")
-            msg += f"\n{r['stock']} {name}\n"
-            msg += f"💰{r['price']:.2f} ({r['change']:+.2f}%) ⭐{r['score']} 📈{r['strength']:+.2f}%\n"
-            for s in r["signals"]:
-                msg += f"  ✓ {s}\n"
-            msg += f"  🧠 {r['comment']}\n"
-
-    msg += "\n📌【持股分析】\n"
-    for h in holding_results:
-        name = STOCK_NAMES.get(h["stock"], "")
-        msg += f"\n{h['stock']} {name}\n"
-        for a in h["alerts"]:
-            msg += f"  {a}\n"
-
-    send_line_long(msg)
+    # ========= 持股分析 =========
+    holding_bubbles = [make_holding_bubble(h, repo) for h in holding_results]
+    if holding_bubbles:
+        send_flex_carousel(holding_bubbles, f"📌 持股分析 {now_str}", token, user_id)
 
 
 # =========================
