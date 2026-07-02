@@ -600,7 +600,7 @@ def make_holding_bubble(h, repo):
 # =========================
 # 抓取財經新聞 RSS
 # =========================
-def fetch_news(rss_url, count=5):
+def fetch_news(rss_url, count=10):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(rss_url, headers=headers, timeout=10)
@@ -619,22 +619,52 @@ def fetch_news(rss_url, count=5):
 
 
 # =========================
+# 抓取個股新聞 RSS
+# =========================
+def fetch_stock_news(symbol, count=6):
+    try:
+        if ".TW" in symbol:
+            url = f"https://tw.stock.yahoo.com/rss?s={symbol}"
+        else:
+            url = f"https://finance.yahoo.com/rss/headline?s={symbol}"
+        return fetch_news(url, count)
+    except Exception as e:
+        print(f"❌ 個股新聞抓取失敗 {symbol}：{e}")
+        return []
+
+
+# =========================
 # 建立新聞 Bubble
 # =========================
 def make_news_bubble(title, news_list, bg_color):
     contents = []
     for i, news in enumerate(news_list):
+        # 标题显示两行约 50 字
+        label = f"{i+1}. {news['title']}"
         contents.append({
-            "type": "button",
-            "action": {
-                "type": "uri",
-                "label": f"{i+1}. {news['title'][:30]}{'...' if len(news['title']) > 30 else ''}",
-                "uri": news["link"]
-            },
-            "style": "link",
-            "height": "sm",
-            "margin": "sm"
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "text",
+                "text": label,
+                "size": "sm",
+                "color": "#333333",
+                "wrap": True,
+                "maxLines": 2,
+                "action": {
+                    "type": "uri",
+                    "uri": news["link"]
+                }
+            }],
+            "margin": "sm",
+            "paddingBottom": "sm"
         })
+        # 分隔线（最后一则不加）
+        if i < len(news_list) - 1:
+            contents.append({
+                "type": "separator",
+                "margin": "sm"
+            })
 
     return {
         "type": "bubble",
@@ -654,9 +684,19 @@ def make_news_bubble(title, news_list, bg_color):
         "body": {
             "type": "box",
             "layout": "vertical",
-            "contents": contents
+            "contents": contents,
+            "paddingAll": "md"
         }
     }
+
+
+# =========================
+# 建立個股新聞 Bubble
+# =========================
+def make_stock_news_bubble(symbol, news_list, bg_color):
+    name = STOCK_NAMES.get(symbol, symbol)
+    title = f"📰 {symbol} {name}"
+    return make_news_bubble(title, news_list, bg_color)
 
 
 # =========================
@@ -852,6 +892,16 @@ def notify():
     else:
         send_line_message(f"📈 多頭選股 {now_str}\n今日無符合條件股票")
 
+    # 多頭個股新聞
+    long_news_bubbles = []
+    for r in long_results:
+        news_count = 6 if r["score"] >= 6 else 4
+        stock_news = fetch_stock_news(r["stock"], news_count)
+        if stock_news:
+            long_news_bubbles.append(make_stock_news_bubble(r["stock"], stock_news, "#c0392b"))
+    if long_news_bubbles:
+        send_flex_carousel(long_news_bubbles, f"📰 多頭個股新聞 {now_str}", token, user_id)
+
     # ========= 空頭選股（score <= -3） =========
     short_results = [r for r in results if r["score"] <= -3]
     short_bubbles = [make_short_bubble(r, repo) for r in short_results]
@@ -859,6 +909,16 @@ def notify():
         send_flex_carousel(short_bubbles, f"📉 空頭選股 {now_str}", token, user_id)
     else:
         send_line_message(f"📉 空頭選股 {now_str}\n今日無符合條件股票")
+
+    # 空頭個股新聞
+    short_news_bubbles = []
+    for r in short_results:
+        news_count = 6 if r["score"] <= -6 else 4
+        stock_news = fetch_stock_news(r["stock"], news_count)
+        if stock_news:
+            short_news_bubbles.append(make_stock_news_bubble(r["stock"], stock_news, "#27ae60"))
+    if short_news_bubbles:
+        send_flex_carousel(short_news_bubbles, f"📰 空頭個股新聞 {now_str}", token, user_id)
 
     # ========= 持股分析 =========
     holding_bubbles = [make_holding_bubble(h, repo) for h in holding_results]
