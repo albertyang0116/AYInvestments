@@ -942,7 +942,7 @@ def notify():
         return
 
     # ========= 財經新聞 =========
-    intl_news = fetch_news("https://feeds.reuters.com/reuters/CNbusinessNews", 10)
+    intl_news = fetch_news("https://tw.news.yahoo.com/rss/finance", 10)
     tw_news = fetch_news("https://money.udn.com/rssfeed/news/1001/5591?ch=money", 10)
 
     news_bubbles = []
