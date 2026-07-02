@@ -11,6 +11,7 @@ import pandas as pd
 import ta
 
 from datetime import datetime
+import xml.etree.ElementTree as ET
 from FinMind.data import DataLoader
 
 
@@ -595,6 +596,69 @@ def make_holding_bubble(h, repo):
     }
 
 
+
+# =========================
+# 抓取財經新聞 RSS
+# =========================
+def fetch_news(rss_url, count=5):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(rss_url, headers=headers, timeout=10)
+        root = ET.fromstring(response.content)
+        items = root.findall(".//item")
+        news = []
+        for item in items[:count]:
+            title = item.findtext("title", "").strip()
+            link = item.findtext("link", "").strip()
+            if title and link:
+                news.append({"title": title, "link": link})
+        return news
+    except Exception as e:
+        print(f"❌ RSS 抓取失敗 {rss_url}：{e}")
+        return []
+
+
+# =========================
+# 建立新聞 Bubble
+# =========================
+def make_news_bubble(title, news_list, bg_color):
+    contents = []
+    for i, news in enumerate(news_list):
+        contents.append({
+            "type": "button",
+            "action": {
+                "type": "uri",
+                "label": f"{i+1}. {news['title'][:30]}{'...' if len(news['title']) > 30 else ''}",
+                "uri": news["link"]
+            },
+            "style": "link",
+            "height": "sm",
+            "margin": "sm"
+        })
+
+    return {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{
+                "type": "text",
+                "text": title,
+                "weight": "bold",
+                "size": "lg",
+                "color": "#ffffff"
+            }],
+            "backgroundColor": bg_color
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents
+        }
+    }
+
+
 # =========================
 # 發送 LINE Flex
 # =========================
@@ -764,6 +828,21 @@ def notify():
     token, user_id = get_line_credentials()
     if not token or not user_id:
         return
+
+    # ========= 財經新聞 =========
+    # 國際財經（Yahoo奇摩）
+    intl_news = fetch_news("https://tw.stock.yahoo.com/rss?category=intl-markets", 5)
+    # 台灣財經（經濟日報）
+    tw_news = fetch_news("https://money.udn.com/rssfeed/news/1001/5591?ch=money", 5)
+
+    news_bubbles = []
+    if intl_news:
+        news_bubbles.append(make_news_bubble("🌍 國際財經頭條", intl_news, "#1a3a5c"))
+    if tw_news:
+        news_bubbles.append(make_news_bubble("🇹🇼 台灣財經頭條", tw_news, "#1a5c2a"))
+
+    if news_bubbles:
+        send_flex_carousel(news_bubbles, f"📰 今日財經頭條 {now_str}", token, user_id)
 
     # ========= 多頭選股（score >= 3） =========
     long_results = [r for r in results if r["score"] >= 3]
