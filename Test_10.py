@@ -406,6 +406,72 @@ def make_long_bubble(r, repo):
     signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
     best_text = "\n🔥 最佳進場" if r["best"] else ""
 
+    # 抓個股新聞
+    news_count = 6 if r["score"] >= 6 else 4
+    stock_news = fetch_stock_news(symbol, news_count)
+
+    # 基本資訊
+    body_contents = [
+        {
+            "type": "text",
+            "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
+            "size": "md",
+            "weight": "bold"
+        },
+        {
+            "type": "text",
+            "text": f"⭐ 評分：{r['score']}",
+            "size": "sm",
+            "color": "#555555",
+            "margin": "sm"
+        },
+        {
+            "type": "text",
+            "text": signals_text + best_text,
+            "size": "sm",
+            "color": "#333333",
+            "margin": "md",
+            "wrap": True
+        },
+        {
+            "type": "text",
+            "text": r["comment"],
+            "size": "sm",
+            "color": "#27ae60",
+            "margin": "sm",
+            "wrap": True
+        }
+    ]
+
+    # 個股新聞
+    if stock_news:
+        body_contents.append({
+            "type": "separator",
+            "margin": "md"
+        })
+        body_contents.append({
+            "type": "text",
+            "text": "📰 個股新聞",
+            "weight": "bold",
+            "size": "sm",
+            "margin": "md",
+            "color": "#333333"
+        })
+        for i, news in enumerate(stock_news):
+            body_contents.append({
+                "type": "text",
+                "text": f"{i+1}. {news['title']}",
+                "size": "xs",
+                "color": "#555555",
+                "wrap": True,
+                "maxLines": 2,
+                "margin": "sm",
+                "action": {
+                    "type": "uri",
+                    "uri": news["link"]
+                }
+            })
+
     return {
         "type": "bubble",
         "size": "mega",
@@ -431,37 +497,7 @@ def make_long_bubble(r, repo):
         "body": {
             "type": "box",
             "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
-                    "size": "md",
-                    "weight": "bold"
-                },
-                {
-                    "type": "text",
-                    "text": f"⭐ 評分：{r['score']}",
-                    "size": "sm",
-                    "color": "#555555",
-                    "margin": "sm"
-                },
-                {
-                    "type": "text",
-                    "text": signals_text + best_text,
-                    "size": "sm",
-                    "color": "#333333",
-                    "margin": "md",
-                    "wrap": True
-                },
-                {
-                    "type": "text",
-                    "text": r["comment"],
-                    "size": "sm",
-                    "color": "#27ae60",
-                    "margin": "sm",
-                    "wrap": True
-                }
-            ]
+            "contents": body_contents
         }
     }
 
@@ -474,6 +510,72 @@ def make_short_bubble(r, repo):
     name = STOCK_NAMES.get(symbol, symbol)
     chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
     signals_text = "\n".join([f"✗ {s}" for s in r["signals"]])
+
+    # 抓個股新聞
+    news_count = 6 if r["score"] <= -6 else 4
+    stock_news = fetch_stock_news(symbol, news_count)
+
+    # 基本資訊
+    body_contents = [
+        {
+            "type": "text",
+            "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
+            "size": "md",
+            "weight": "bold"
+        },
+        {
+            "type": "text",
+            "text": f"⭐ 評分：{r['score']}",
+            "size": "sm",
+            "color": "#555555",
+            "margin": "sm"
+        },
+        {
+            "type": "text",
+            "text": signals_text,
+            "size": "sm",
+            "color": "#333333",
+            "margin": "md",
+            "wrap": True
+        },
+        {
+            "type": "text",
+            "text": r["comment"],
+            "size": "sm",
+            "color": "#e74c3c",
+            "margin": "sm",
+            "wrap": True
+        }
+    ]
+
+    # 個股新聞
+    if stock_news:
+        body_contents.append({
+            "type": "separator",
+            "margin": "md"
+        })
+        body_contents.append({
+            "type": "text",
+            "text": "📰 個股新聞",
+            "weight": "bold",
+            "size": "sm",
+            "margin": "md",
+            "color": "#333333"
+        })
+        for i, news in enumerate(stock_news):
+            body_contents.append({
+                "type": "text",
+                "text": f"{i+1}. {news['title']}",
+                "size": "xs",
+                "color": "#555555",
+                "wrap": True,
+                "maxLines": 2,
+                "margin": "sm",
+                "action": {
+                    "type": "uri",
+                    "uri": news["link"]
+                }
+            })
 
     return {
         "type": "bubble",
@@ -500,37 +602,7 @@ def make_short_bubble(r, repo):
         "body": {
             "type": "box",
             "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": f"💰 {r['price']:.2f} ({r['change']:+.2f}%)",
-                    "size": "md",
-                    "weight": "bold"
-                },
-                {
-                    "type": "text",
-                    "text": f"⭐ 評分：{r['score']}",
-                    "size": "sm",
-                    "color": "#555555",
-                    "margin": "sm"
-                },
-                {
-                    "type": "text",
-                    "text": signals_text,
-                    "size": "sm",
-                    "color": "#333333",
-                    "margin": "md",
-                    "wrap": True
-                },
-                {
-                    "type": "text",
-                    "text": r["comment"],
-                    "size": "sm",
-                    "color": "#e74c3c",
-                    "margin": "sm",
-                    "wrap": True
-                }
-            ]
+            "contents": body_contents
         }
     }
 
@@ -892,16 +964,6 @@ def notify():
     else:
         send_line_message(f"📈 多頭選股 {now_str}\n今日無符合條件股票")
 
-    # 多頭個股新聞
-    long_news_bubbles = []
-    for r in long_results:
-        news_count = 6 if r["score"] >= 6 else 4
-        stock_news = fetch_stock_news(r["stock"], news_count)
-        if stock_news:
-            long_news_bubbles.append(make_stock_news_bubble(r["stock"], stock_news, "#c0392b"))
-    if long_news_bubbles:
-        send_flex_carousel(long_news_bubbles, f"📰 多頭個股新聞 {now_str}", token, user_id)
-
     # ========= 空頭選股（score <= -3） =========
     short_results = [r for r in results if r["score"] <= -3]
     short_bubbles = [make_short_bubble(r, repo) for r in short_results]
@@ -909,16 +971,6 @@ def notify():
         send_flex_carousel(short_bubbles, f"📉 空頭選股 {now_str}", token, user_id)
     else:
         send_line_message(f"📉 空頭選股 {now_str}\n今日無符合條件股票")
-
-    # 空頭個股新聞
-    short_news_bubbles = []
-    for r in short_results:
-        news_count = 6 if r["score"] <= -6 else 4
-        stock_news = fetch_stock_news(r["stock"], news_count)
-        if stock_news:
-            short_news_bubbles.append(make_stock_news_bubble(r["stock"], stock_news, "#27ae60"))
-    if short_news_bubbles:
-        send_flex_carousel(short_news_bubbles, f"📰 空頭個股新聞 {now_str}", token, user_id)
 
     # ========= 持股分析 =========
     holding_bubbles = [make_holding_bubble(h, repo) for h in holding_results]
