@@ -942,10 +942,8 @@ def notify():
         return
 
     # ========= 財經新聞 =========
-    # 國際財經（Yahoo奇摩）
-    intl_news = fetch_news("https://tw.stock.yahoo.com/rss?category=intl-markets", 5)
-    # 台灣財經（經濟日報）
-    tw_news = fetch_news("https://money.udn.com/rssfeed/news/1001/5591?ch=money", 5)
+    intl_news = fetch_news("https://feeds.reuters.com/reuters/CNbusinessNews", 10)
+    tw_news = fetch_news("https://money.udn.com/rssfeed/news/1001/5591?ch=money", 10)
 
     news_bubbles = []
     if intl_news:
