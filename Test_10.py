@@ -942,8 +942,14 @@ def notify():
         return
 
     # ========= 財經新聞 =========
+    # 國際財經（多來源備援）
     intl_news = fetch_news("https://tw.news.yahoo.com/rss/finance", 10)
+    if not intl_news:
+        intl_news = fetch_news("https://tw.stock.yahoo.com/rss?category=intl-markets", 10)
+    # 台灣財經（經濟日報）
     tw_news = fetch_news("https://money.udn.com/rssfeed/news/1001/5591?ch=money", 10)
+    if not tw_news:
+        tw_news = fetch_news("https://www.ctee.com.tw/feed", 10)
 
     news_bubbles = []
     if intl_news:
@@ -954,16 +960,16 @@ def notify():
     if news_bubbles:
         send_flex_carousel(news_bubbles, f"📰 今日財經頭條 {now_str}", token, user_id)
 
-    # ========= 多頭選股（score >= 3） =========
-    long_results = [r for r in results if r["score"] >= 3]
+    # ========= 多頭選股（score >= 3，分數高的在左） =========
+    long_results = sorted([r for r in results if r["score"] >= 3], key=lambda x: x["score"], reverse=True)
     long_bubbles = [make_long_bubble(r, repo) for r in long_results]
     if long_bubbles:
         send_flex_carousel(long_bubbles, f"📈 多頭選股 {now_str}", token, user_id)
     else:
         send_line_message(f"📈 多頭選股 {now_str}\n今日無符合條件股票")
 
-    # ========= 空頭選股（score <= -3） =========
-    short_results = [r for r in results if r["score"] <= -3]
+    # ========= 空頭選股（score <= -3，分數低的在左） =========
+    short_results = sorted([r for r in results if r["score"] <= -3], key=lambda x: x["score"])
     short_bubbles = [make_short_bubble(r, repo) for r in short_results]
     if short_bubbles:
         send_flex_carousel(short_bubbles, f"📉 空頭選股 {now_str}", token, user_id)
