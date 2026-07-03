@@ -17,6 +17,8 @@
 8046.TW,南電
 6239.TW,力成
 4919.TW,新唐
+3008.TW,大立光
+2449.TW,京元電
 AAPL,Apple
 TSLA,Tesla
 AVGO,Broadcom
