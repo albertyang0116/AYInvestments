@@ -357,11 +357,15 @@ def generate_chart(symbol, df):
         df_chart = df_chart[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
         ma20 = df_chart["Close"].rolling(20).mean()
-        exp1 = df_chart["Close"].ewm(span=5, adjust=False).mean()
-        exp2 = df_chart["Close"].ewm(span=60, adjust=False).mean()
-        macd = exp1 - exp2
-        signal = macd.ewm(span=20, adjust=False).mean()
-        histogram = macd - signal
+        macd_obj = ta.trend.MACD(
+            df_chart["Close"].astype(float),
+            window_fast=5,
+            window_slow=60,
+            window_sign=20
+        )
+        macd = macd_obj.macd()
+        signal = macd_obj.macd_signal()
+        histogram = macd_obj.macd_diff()
 
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
@@ -402,8 +406,7 @@ def generate_chart(symbol, df):
 def make_long_bubble(r, repo):
     symbol = r["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    today = datetime.today().strftime("%Y%m%d") 
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
     signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
     best_text = "\n🔥 最佳進場" if r["best"] else ""
 
@@ -509,8 +512,7 @@ def make_long_bubble(r, repo):
 def make_short_bubble(r, repo):
     symbol = r["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    today = datetime.today().strftime("%Y%m%d") 
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
     signals_text = "\n".join([f"✗ {s}" for s in r["signals"]])
 
     # 抓個股新聞
@@ -615,8 +617,7 @@ def make_short_bubble(r, repo):
 def make_holding_bubble(h, repo):
     symbol = h["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    today = datetime.today().strftime("%Y%m%d") 
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
     alerts_text = "\n".join(h["alerts"])
 
     return {
