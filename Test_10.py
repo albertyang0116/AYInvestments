@@ -10,7 +10,7 @@ import yfinance as yf
 import pandas as pd
 import ta
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import xml.etree.ElementTree as ET
 from FinMind.data import DataLoader
 
@@ -28,6 +28,12 @@ def load_token():
     except:
         print("❌ Token 讀取失敗")
         return None
+
+
+# =========================
+# 台灣時區
+# =========================
+TW_TZ = timezone(timedelta(hours=8))
 
 
 # =========================
@@ -100,7 +106,7 @@ def get_stock_data(symbol):
             df = api.taiwan_stock_daily(
                 stock_id=stock_id,
                 start_date="2024-01-01",
-                end_date=datetime.today().strftime("%Y-%m-%d")
+                end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
             )
             if df.empty:
                 return None
@@ -161,7 +167,7 @@ def get_institutional_score(symbol, consecutive_days=3):
         df = api.taiwan_stock_institutional_investors(
             stock_id=stock_id,
             start_date="2024-01-01",
-            end_date=datetime.today().strftime("%Y-%m-%d")
+            end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
         )
         if df is None or df.empty:
             return signals, score
@@ -914,7 +920,7 @@ def run():
             generate_chart(symbol, df)
 
     # ========= 儲存結果到 JSON =========
-    now_str = datetime.today().strftime("%Y/%m/%d %H:%M")
+    now_str = datetime.now(TW_TZ).strftime("%Y/%m/%d %H:%M")
     output = {
         "now_str": now_str,
         "results": results,
