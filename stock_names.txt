@@ -19,6 +19,7 @@
 4919.TW,新唐
 3008.TW,大立光
 2449.TW,京元電
+2317.TW,鴻海
 AAPL,Apple
 TSLA,Tesla
 AVGO,Broadcom
