@@ -421,7 +421,8 @@ def generate_chart(symbol, df):
 def make_long_bubble(r, repo):
     symbol = r["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    today = datetime.now(TW_TZ).strftime("%Y%m%d")
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
     signals_text = "\n".join([f"✓ {s}" for s in r["signals"]])
     best_text = "\n🔥 最佳進場" if r["best"] else ""
 
@@ -527,7 +528,8 @@ def make_long_bubble(r, repo):
 def make_short_bubble(r, repo):
     symbol = r["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    today = datetime.now(TW_TZ).strftime("%Y%m%d")
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
     signals_text = "\n".join([f"✗ {s}" for s in r["signals"]])
 
     # 抓個股新聞
@@ -632,7 +634,8 @@ def make_short_bubble(r, repo):
 def make_holding_bubble(h, repo):
     symbol = h["stock"]
     name = STOCK_NAMES.get(symbol, symbol)
-    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png"
+    today = datetime.now(TW_TZ).strftime("%Y%m%d")
+    chart_url = f"https://github.com/{repo}/raw/refs/heads/main/charts/{symbol.replace('.', '_')}.png?v={today}"
     alerts_text = "\n".join(h["alerts"])
 
     return {
