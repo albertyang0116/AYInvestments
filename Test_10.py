@@ -916,7 +916,6 @@ def run():
     for symbol in chart_symbols:
         df = get_stock_data(symbol)
         if df is not None and len(df) >= 60:
-            df = add_indicators(df)
             generate_chart(symbol, df)
 
     # ========= 儲存結果到 JSON =========
