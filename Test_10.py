@@ -358,20 +358,29 @@ def generate_chart(symbol, df):
     try:
         os.makedirs("charts", exist_ok=True)
 
-        df_chart = df.tail(60).copy()
-        df_chart.index = pd.to_datetime(df_chart.index)
-        df_chart = df_chart[["Open", "High", "Low", "Close", "Volume"]].astype(float)
+        # 取足夠數據計算 MACD(5,60,20)，慢線需要至少 120 天
+        df_full = df.copy()
+        df_full.index = pd.to_datetime(df_full.index)
+        df_full = df_full[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
-        ma20 = df_chart["Close"].rolling(20).mean()
+        # 用全部數據計算指標
+        ma20_full = df_full["Close"].rolling(20).mean()
         macd_obj = ta.trend.MACD(
-            df_chart["Close"].astype(float),
+            df_full["Close"],
             window_fast=5,
             window_slow=60,
             window_sign=20
         )
-        macd = macd_obj.macd()
-        signal = macd_obj.macd_signal()
-        histogram = macd_obj.macd_diff()
+        macd_full = macd_obj.macd()
+        signal_full = macd_obj.macd_signal()
+        histogram_full = macd_obj.macd_diff()
+
+        # 只取最近 60 天顯示
+        df_chart = df_full.tail(60)
+        ma20 = ma20_full.tail(60)
+        macd = macd_full.tail(60)
+        signal = signal_full.tail(60)
+        histogram = histogram_full.tail(60)
 
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
