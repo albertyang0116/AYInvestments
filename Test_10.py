@@ -105,7 +105,7 @@ def get_stock_data(symbol):
             stock_id = symbol.replace(".TW", "")
             df = api.taiwan_stock_daily(
                 stock_id=stock_id,
-                start_date="2024-01-01",
+                start_date="2022-01-01",
                 end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
             )
             if df.empty:
@@ -166,7 +166,7 @@ def get_institutional_score(symbol, consecutive_days=3):
         stock_id = symbol.replace(".TW", "")
         df = api.taiwan_stock_institutional_investors(
             stock_id=stock_id,
-            start_date="2024-01-01",
+            start_date="2022-01-01",
             end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
         )
         if df is None or df.empty:
