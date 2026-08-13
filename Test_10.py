@@ -105,7 +105,7 @@ def get_stock_data(symbol):
             stock_id = symbol.replace(".TW", "")
             df = api.taiwan_stock_daily(
                 stock_id=stock_id,
-                start_date="2022-01-01",
+                start_date="2024-01-01",
                 end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
             )
             if df.empty:
@@ -142,14 +142,13 @@ def add_indicators(df):
     close = df["Close"].astype(float)
     df["MA20"] = close.rolling(20).mean()
     df["VOL_MA20"] = df["Volume"].rolling(20).mean()
-    macd = ta.trend.MACD(
-        close,
-        window_slow=60,
-        window_fast=5,
-        window_sign=20
-    )
-    df["MACD"] = macd.macd()
-    df["MACD_SIGNAL"] = macd.macd_signal()
+    # 台灣券商版 MACD（元大等，使用標準 EMA 2/(N+1) 係數）
+    ema_fast = close.ewm(span=5, adjust=False).mean()
+    ema_slow = close.ewm(span=60, adjust=False).mean()
+    dif = ema_fast - ema_slow
+    dif_signal = dif.ewm(span=20, adjust=False).mean()
+    df["MACD"] = dif
+    df["MACD_SIGNAL"] = dif_signal
     df = df.dropna()
     return df
 
@@ -166,7 +165,7 @@ def get_institutional_score(symbol, consecutive_days=3):
         stock_id = symbol.replace(".TW", "")
         df = api.taiwan_stock_institutional_investors(
             stock_id=stock_id,
-            start_date="2022-01-01",
+            start_date="2024-01-01",
             end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
         )
         if df is None or df.empty:
@@ -359,21 +358,19 @@ def generate_chart(symbol, df):
         os.makedirs("charts", exist_ok=True)
 
         # 取足夠數據計算 MACD(5,60,20)，慢線需要至少 120 天
-        df_full = df.tail(120).copy()
+        df_full = df.copy()
         df_full.index = pd.to_datetime(df_full.index)
         df_full = df_full[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
-        # 用全部數據計算指標
+        # 用全部數據計算指標（台灣券商版 EMA）
         ma20_full = df_full["Close"].rolling(20).mean()
-        macd_obj = ta.trend.MACD(
-            df_full["Close"],
-            window_fast=5,
-            window_slow=60,
-            window_sign=20
-        )
-        macd_full = macd_obj.macd()
-        signal_full = macd_obj.macd_signal()
-        histogram_full = macd_obj.macd_diff()
+        close_full = df_full["Close"].astype(float)
+        ema_fast_full = close_full.ewm(span=5, adjust=False).mean()
+        ema_slow_full = close_full.ewm(span=60, adjust=False).mean()
+        dif_full = ema_fast_full - ema_slow_full
+        signal_full = dif_full.ewm(span=20, adjust=False).mean()
+        macd_full = dif_full
+        histogram_full = dif_full - signal_full
 
         # 只取最近 60 天顯示
         df_chart = df_full.tail(60)
