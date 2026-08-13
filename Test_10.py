@@ -359,7 +359,7 @@ def generate_chart(symbol, df):
         os.makedirs("charts", exist_ok=True)
 
         # 取足夠數據計算 MACD(5,60,20)，慢線需要至少 120 天
-        df_full = df.copy()
+        df_full = df.tail(120).copy()
         df_full.index = pd.to_datetime(df_full.index)
         df_full = df_full[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
