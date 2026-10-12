@@ -362,32 +362,33 @@ def generate_chart(symbol, df):
         df_full.index = pd.to_datetime(df_full.index)
         df_full = df_full[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
-        # 用全部數據計算 MA20（MA 不受 EMA 記憶問題影響）
+        # 用全部數據計算指標（與篩選邏輯一致）
         ma20_full = df_full["Close"].rolling(20).mean()
-
-        # MACD(5,60,20) — 只用最近 180 天計算，避免遠古極端值拖住 Signal
-        # 180 天 = 60(慢線暖機) + 60(Signal暖機) + 60(顯示天數)
-        chart_window = 180
-        df_macd = df_full.tail(chart_window) if len(df_full) > chart_window else df_full
-        close_macd = df_macd["Close"].astype(float)
-        ema_fast = close_macd.ewm(span=5, adjust=False).mean()
-        ema_slow = close_macd.ewm(span=60, adjust=False).mean()
-        dif = ema_fast - ema_slow
-        signal = dif.ewm(span=20, adjust=False).mean()
-        histogram = dif - signal
+        close_full = df_full["Close"].astype(float)
+        ema_fast_full = close_full.ewm(span=5, adjust=False).mean()
+        ema_slow_full = close_full.ewm(span=60, adjust=False).mean()
+        dif_full = ema_fast_full - ema_slow_full
+        signal_full = dif_full.ewm(span=20, adjust=False).mean()
 
         # 只取最近 60 天顯示
         df_chart = df_full.tail(60)
         ma20 = ma20_full.tail(60)
-        macd = dif.tail(60)
-        signal = signal.tail(60)
-        histogram = histogram.tail(60)
+        dif_display = dif_full.tail(60)
+        signal_display = signal_full.tail(60)
+        # OSC = DIF - Signal
+        # OSC > 0 紅（DIF 在 Signal 上方，多頭）
+        # OSC < 0 綠（DIF 在 Signal 下方，空頭）
+        # 紅綠切換 = 黃金/死亡交叉
+        osc_display = dif_display - signal_display
+        osc_pos = osc_display.where(osc_display >= 0, 0)
+        osc_neg = osc_display.where(osc_display < 0, 0)
 
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
-            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD'),
-            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal'),
-            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5),
+            mpf.make_addplot(osc_pos, panel=2, type='bar', color='red', alpha=0.7),
+            mpf.make_addplot(osc_neg, panel=2, type='bar', color='green', alpha=0.7),
+            mpf.make_addplot(dif_display, panel=2, color='blue', width=1.0,
+                             secondary_y=True, label='DIF'),
         ]
 
         name = STOCK_NAMES.get(symbol, symbol)
