@@ -379,11 +379,17 @@ def generate_chart(symbol, df):
         signal = signal_full.tail(60)
         histogram = histogram_full.tail(60)
 
+        # 用 DIF 範圍設定 MACD panel 的 Y 軸，避免被 Signal 歷史極端值撐開
+        dif_min = float(macd.min())
+        dif_max = float(macd.max())
+        dif_margin = (dif_max - dif_min) * 0.2
+        macd_ylim = (dif_min - dif_margin, dif_max + dif_margin)
+
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
-            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD'),
-            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal'),
-            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5),
+            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD', ylim=macd_ylim),
+            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal', ylim=macd_ylim),
+            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5, ylim=macd_ylim),
         ]
 
         name = STOCK_NAMES.get(symbol, symbol)
