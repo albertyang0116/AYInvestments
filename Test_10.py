@@ -105,7 +105,7 @@ def get_stock_data(symbol):
             stock_id = symbol.replace(".TW", "")
             df = api.taiwan_stock_daily(
                 stock_id=stock_id,
-                start_date="2024-01-01",
+                start_date="2023-01-01",
                 end_date=datetime.now(TW_TZ).strftime("%Y-%m-%d")
             )
             if df.empty:
@@ -123,7 +123,7 @@ def get_stock_data(symbol):
             df = df.dropna()
             return df
         else:
-            df = yf.download(symbol, period="6mo", auto_adjust=False)
+            df = yf.download(symbol, start="2023-01-01", auto_adjust=False)
             if df.empty:
                 return None
             if hasattr(df.columns, "levels"):
