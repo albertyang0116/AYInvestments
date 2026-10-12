@@ -362,34 +362,32 @@ def generate_chart(symbol, df):
         df_full.index = pd.to_datetime(df_full.index)
         df_full = df_full[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
-        # 用全部數據計算指標（台灣券商版 EMA）
+        # 用全部數據計算 MA20（MA 不受 EMA 記憶問題影響）
         ma20_full = df_full["Close"].rolling(20).mean()
-        close_full = df_full["Close"].astype(float)
-        ema_fast_full = close_full.ewm(span=5, adjust=False).mean()
-        ema_slow_full = close_full.ewm(span=60, adjust=False).mean()
-        dif_full = ema_fast_full - ema_slow_full
-        signal_full = dif_full.ewm(span=20, adjust=False).mean()
-        macd_full = dif_full
-        histogram_full = dif_full - signal_full
+
+        # MACD(5,60,20) — 只用最近 180 天計算，避免遠古極端值拖住 Signal
+        # 180 天 = 60(慢線暖機) + 60(Signal暖機) + 60(顯示天數)
+        chart_window = 180
+        df_macd = df_full.tail(chart_window) if len(df_full) > chart_window else df_full
+        close_macd = df_macd["Close"].astype(float)
+        ema_fast = close_macd.ewm(span=5, adjust=False).mean()
+        ema_slow = close_macd.ewm(span=60, adjust=False).mean()
+        dif = ema_fast - ema_slow
+        signal = dif.ewm(span=20, adjust=False).mean()
+        histogram = dif - signal
 
         # 只取最近 60 天顯示
         df_chart = df_full.tail(60)
         ma20 = ma20_full.tail(60)
-        macd = macd_full.tail(60)
-        signal = signal_full.tail(60)
-        histogram = histogram_full.tail(60)
-
-        # 用 DIF 範圍設定 MACD panel 的 Y 軸，避免被 Signal 歷史極端值撐開
-        dif_min = float(macd.min())
-        dif_max = float(macd.max())
-        dif_margin = (dif_max - dif_min) * 0.2
-        macd_ylim = (dif_min - dif_margin, dif_max + dif_margin)
+        macd = dif.tail(60)
+        signal = signal.tail(60)
+        histogram = histogram.tail(60)
 
         apds = [
             mpf.make_addplot(ma20, color='orange', width=1.5, label='MA20'),
-            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD', ylim=macd_ylim),
-            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal', ylim=macd_ylim),
-            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5, ylim=macd_ylim),
+            mpf.make_addplot(macd, panel=2, color='blue', width=1.2, label='MACD'),
+            mpf.make_addplot(signal, panel=2, color='red', width=1.2, label='Signal'),
+            mpf.make_addplot(histogram, panel=2, type='bar', color='gray', alpha=0.5),
         ]
 
         name = STOCK_NAMES.get(symbol, symbol)
