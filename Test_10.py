@@ -229,6 +229,10 @@ def check_signal(df):
         signals.append("MACD黃金交叉")
         score += 3
 
+    if macd_now > 0 and macd_prev <= 0:
+        signals.append("DIF突破零軸（轉多）")
+        score += 3
+
     if macd_now > macd_prev:
         signals.append("MACD動能增強")
         score += 1
@@ -244,6 +248,10 @@ def check_signal(df):
 
     if macd_now < macd_signal_now and macd_prev >= macd_signal_prev:
         signals.append("MACD死亡交叉")
+        score -= 3
+
+    if macd_now < 0 and macd_prev >= 0:
+        signals.append("DIF跌破零軸（轉空）")
         score -= 3
 
     if macd_now < macd_prev:
